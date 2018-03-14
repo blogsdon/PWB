@@ -1,0 +1,250 @@
+---
+title: "ROSMAP PiL DEG analysis"
+output:
+  html_notebook: default
+  pdf_document: default
+---
+
+First we load in the PiL data
+
+
+```{r}
+foo <- data.table::fread('ROSMAP_PiL_dep_cog.csv',data.table=F)
+foo <- dplyr::filter(foo,fu_year==0)
+```
+
+Next we load in the RNAseq design matrix
+
+```{r}
+synapser::synLogin()
+dmobj <- synapser::synGet('syn8456640')
+dm <- data.table::fread(dmobj$path,data.table=F)
+```
+
+Next we load in the covariate data
+
+```{r}
+covobj <- synapser::synGet('syn3191087')
+cova <- data.table::fread(covobj$path,data.table=F)
+cova <- cova[,-1]
+colnames(cova)
+cova <- dplyr::select(cova,projid,cogdx,braaksc,ceradsc,age_first_ad_dx,educ)
+```
+
+Next we load in the count data
+
+```{r}
+countobj <- synapser::synGet('syn8456638')
+countMatrix <- data.table::fread(countobj$path,data.table=F)
+rownames(countMatrix) <- countMatrix$ensembl_gene_id
+countMatrix <- countMatrix[,-1]
+countMatrix <- t(countMatrix)
+countMatrix <- data.frame(countMatrix,stringsAsFactors = F)
+countMatrix$sampleId <- rownames(countMatrix)
+```
+
+Now we join all of the relevant data frames together into a single analysis data frame
+
+```{r}
+key <- data.table::fread("key.csv",data.table=F)
+foo <- dplyr::left_join(foo,key)
+foo <- dplyr::filter(foo,!is.na(Sampleid))
+foo <- dplyr::left_join(foo,dm,by=c('Sampleid'='SampleID'))
+foo <- dplyr::left_join(foo,cova)
+foo <- dplyr::left_join(foo,countMatrix,by=c('Sampleid'='sampleId'))
+```
+
+Now we remove individuals with dementia at baseline
+```{r}
+foo <- dplyr::filter(foo,dcfdx < 4)
+```
+
+
+Define the simple linear model function and get the gene names
+
+```{r}
+run_simple_model <- function(geneId,pheno,foo,pb,braak=FALSE){
+  if(!braak){
+    str <- paste0(pheno," ~ ",geneId," + dcfdx + Batch0 + Batch1 + Batch2 + Batch3 + Batch4 + Batch5 + Batch6 + Batch7 + msex0 + RINcontinuous + PCT_CODING_BASES + PCT_INTERGENIC_BASES + pmi + age_at_visit")
+  }else{
+    str <- paste0(pheno," ~ ",geneId," + dcfdx + Batch0 + Batch1 + Batch2 + Batch3 + Batch4 + Batch5 + Batch6 + Batch7 + msex0 + RINcontinuous + PCT_CODING_BASES + PCT_INTERGENIC_BASES + pmi + age_at_visit + braaksc")
+  }
+  str <- as.formula(str)
+  pb$tick()
+  #res<-lme4::lmer(str,foo)
+  res <- lm(str,foo)
+  return(summary(res)$coef[2,4])
+}
+
+gene_ids <- colnames(countMatrix)
+gene_ids <- gene_ids[-which(gene_ids=='sampleId')]
+```
+
+Run model 1, educ
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'educ',foo,pb))
+gap::qqunif(pil_lm_results,main='educ, Model 1')
+```
+
+Run model 2, PiL
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'educ',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='educ, Model 2')
+```
+
+
+
+Run model 1, PiL
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'purpose_total',foo,pb))
+gap::qqunif(pil_lm_results,main='purpose_total, Model 1')
+```
+
+Run model 2, PiL
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'purpose_total',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='purpose_total, Model 2')
+```
+
+Run model 1, r_depres
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'r_depres',foo,pb))
+gap::qqunif(pil_lm_results,main='r_depres, Model 1')
+```
+
+Run model 2, r_depres
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'r_depres',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='r_depres, Model 2')
+```
+
+Run model 1, cogn_ep
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_ep',foo,pb))
+gap::qqunif(pil_lm_results,main='cogn_ep, Model 1')
+```
+
+Run model 2, cogn_ep
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_ep',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cogn_ep, Model 2')
+```
+
+Run model 1, cogn_po
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_po',foo,pb))
+gap::qqunif(pil_lm_results,main='cogn_po, Model 1')
+```
+
+Run model 2, cogn_po
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_po',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cogn_po, Model 2')
+```
+
+Run model 1, cogn_ps
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_ps',foo,pb))
+gap::qqunif(pil_lm_results,main='cogn_ps, Model 1')
+```
+
+Run model 2, cogn_ps
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_ps',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cogn_ps, Model 2')
+```
+
+Run model 1, cogn_se
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_se',foo,pb))
+gap::qqunif(pil_lm_results,main='cogn_se, Model 1')
+```
+
+Run model 2, cogn_se
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_se',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cogn_se, Model 2')
+```
+
+Run model 1, cogn_wo
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_wo',foo,pb))
+gap::qqunif(pil_lm_results,main='cogn_wo, Model 1')
+```
+
+Run model 2, cogn_wo
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_wo',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cogn_wo, Model 2')
+```
+
+Run model 1, cogn_global
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_global',foo,pb))
+gap::qqunif(pil_lm_results,main='cogn_global, Model 1')
+```
+
+Run model 2, cogn_global
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cogn_global',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cogn_global, Model 2')
+```
+
+Run model 1, cesdsum
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cesdsum',foo,pb))
+gap::qqunif(pil_lm_results,main='cesdsum, Model 1')
+```
+
+Run model 2, cesdsum
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'cesdsum',foo,pb,braak=TRUE))
+gap::qqunif(pil_lm_results,main='cesdsum, Model 2')
+```
+Run model 1, braaksc
+
+```{r}
+pb <- progress::progress_bar$new(total=(length(gene_ids)))
+system.time(pil_lm_results <- sapply(gene_ids,run_simple_model,'braaksc',foo,pb))
+gap::qqunif(pil_lm_results,main='braaksc, Model 1')
+```
